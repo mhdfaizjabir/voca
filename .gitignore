@@ -1,0 +1,18 @@
+# env
+.env
+.env.local
+*.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.venv-*/
+venv/
+*.egg-info/
+.pytest_cache/
+*.sqlite3
+
+# node/frontend (future)
+node_modules/
+.next/
