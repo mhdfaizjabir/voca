@@ -1,11 +1,3 @@
----
-
-## 📄 Complete README.md (full replacement)
-
-Copy **everything** below from the very first line (`# Voca AI`) to the very last line (`python-dotenv.`):
-
----
-
 ```markdown
 # Voca AI
 
