@@ -40,6 +40,20 @@ def _init() -> None:
             )
             """
         )
+        # Tier-0 cache for company research (see research/company_research.py).
+        # Keyed on a normalized company name so repeat sessions for the same
+        # company skip straight past tier 1 (parametric LLM) and tier 2 (web search).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS companies (
+                name TEXT PRIMARY KEY,
+                research_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence INTEGER,
+                fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
 
 
 _init()
@@ -97,3 +111,35 @@ def get_session_score(session_id: str) -> dict | None:
     result["rubric"] = json.loads(result.pop("rubric_json"))
     result["score"] = json.loads(result.pop("score_json"))
     return result
+
+
+def _normalize_company_name(name: str) -> str:
+    return " ".join(name.strip().lower().split())
+
+
+def get_company_research(name: str) -> dict | None:
+    key = _normalize_company_name(name)
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM companies WHERE name = ?", (key,)).fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    result["research"] = json.loads(result.pop("research_json"))
+    return result
+
+
+def save_company_research(name: str, research: dict, source: str, confidence: int | None = None) -> None:
+    key = _normalize_company_name(name)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO companies (name, research_json, source, confidence, fetched_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(name) DO UPDATE SET
+                research_json = excluded.research_json,
+                source = excluded.source,
+                confidence = excluded.confidence,
+                fetched_at = excluded.fetched_at
+            """,
+            (key, json.dumps(research), source, confidence),
+        )

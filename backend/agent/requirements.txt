@@ -5,3 +5,4 @@ livekit-plugins-silero>=1.5,<2
 python-dotenv>=1.0
 pinecone>=9,<10
 openai>=1.0
+tavily-python>=0.5

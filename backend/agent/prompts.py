@@ -6,12 +6,27 @@ Keep your own turns short — this is a voice conversation, not an essay.
 """
 
 
-def build_instructions(context_chunks: list[str] | None = None) -> str:
-    if not context_chunks:
-        return BASE_INTERVIEWER_INSTRUCTIONS
+def build_instructions(
+    context_chunks: list[str] | None = None,
+    company_context: dict | None = None,
+) -> str:
+    instructions = BASE_INTERVIEWER_INSTRUCTIONS
 
-    context = "\n\n".join(context_chunks)
-    return (
-        f"{BASE_INTERVIEWER_INSTRUCTIONS}\n\n"
-        f"Ground your questions in this material:\n{context}"
-    )
+    # 1. Document grounding (CV/JD)
+    if context_chunks:
+        context_text = "\n\n".join(context_chunks)
+        instructions += f"\n\nGround your questions in this material:\n{context_text}"
+
+    # 2. Company (and position) grounding
+    if company_context:
+        company = company_context.get("company", "the company")
+        position = company_context.get("position")
+        summary = company_context.get("summary", "")
+        if summary:
+            role_hint = f" for the **{position}** role" if position else ""
+            instructions += (
+                f"\n\nYou have background on {company}{role_hint} interview culture: {summary}. "
+                "Ask 1–2 questions that mirror what this company really asks in interviews. "
+                "If specific stages or common questions are mentioned, weave them into your style."
+            )
+    return instructions

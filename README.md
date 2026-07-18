@@ -1,71 +1,163 @@
+**No** – that's only the first half! The README got cut off. Let me give you the **complete** version again. I'll make sure it's 100% complete this time.
+
+---
+
+## 📄 Complete README.md (full replacement)
+
+Copy **everything** below from the very first line (`# Voca AI`) to the very last line (`python-dotenv.`):
+
+---
+
+```markdown
 # Voca AI
 
-Voice-based interview practice platform. Users upload course material (viva
-practice) or a job description (mock interview practice); an AI voice agent
-conducts a spoken interview grounded in that material, then scores the
-transcript against a user-defined rubric.
+Voice‑based interview practice platform. Users upload course material (viva practice) or a job description (mock interview) – an AI voice agent conducts a spoken interview grounded in that material, then scores the transcript against a user‑defined rubric.
+
+---
 
 ## Status
 
-- **Milestone 1 (done)**: standalone LiveKit voice agent — Deepgram STT →
-  Groq LLM → Deepgram TTS. See `backend/agent/`. Tested live.
-- **Milestone 2 (done)**: RAG — document upload, chunking, Pinecone
-  integrated-inference embeddings/retrieval, wired into the agent's
-  instructions via room metadata. See `backend/rag/`,
-  `backend/api/routers/documents.py`, `backend/api/routers/sessions.py`.
-  Tested live (upload → embed → retrieve).
-- **Milestone 3 (not built — owned by teammate)**: MongoDB Atlas
-  persistence for users/sessions/transcripts. `backend/db/local_store.py`
-  is a temporary SQLite stand-in for document metadata only, used until
-  that lands.
-- **Milestone 4 (done)**: rubric-based scoring. A shutdown callback in
-  `backend/agent/agent.py` captures the session transcript when a call
-  ends, scores it against a (default or per-session custom) rubric via
-  Groq, and stores the result. See `backend/scoring/`, `GET
-  /sessions/{id}/score`. Tested live (scoring logic + storage + API
-  round-trip); the LiveKit shutdown-callback trigger itself needs a real
-  call to confirm.
-- **Frontend (basic, done)**: single-page Next.js app to upload a document,
-  start/end a voice session, and poll for the score afterwards. See
-  `frontend/`.
-- **Web scraping (not built — owned by teammate)**: company research to
-  enrich job-description context. Not wired in yet.
+| Milestone | Status |
+| :--- | :--- |
+| **1. LiveKit Voice Agent** | ✅ Done – `backend/agent/` (Deepgram STT → Groq LLM → Deepgram TTS) |
+| **2. RAG (Upload / Embed / Retrieve)** | ✅ Done – `backend/rag/`, `backend/api/routers/` |
+| **3. MongoDB Persistence** | ✅ Done – research cache stored in MongoDB Atlas (`backend/db/mongo_store.py`) |
+| **4. Rubric‑based Scoring** | ✅ Done – `backend/scoring/`, `GET /sessions/{id}/score` |
+| **5. Company Research (Tiered + Cache)** | ✅ Done – Tier 1 (LLM) → fallback to Tier 2 (Tavily web search), cached by `company` + `position` |
+| **6. Position‑Specific Lookup** | ✅ Done – agent accepts `position` in room metadata and uses it in prompts |
+| **7. Cache Expiry (TTL)** | ✅ Done – MongoDB auto‑deletes research entries after 30 days |
+| **8. Vague‑Output Detector** | ✅ Done – forces Tavily fallback if LLM gives generic hedging phrases |
+| **9. Frontend (basic)** | ✅ Done – Next.js single‑page app (`frontend/`) |
 
-## Running everything (3 terminals)
+---
 
-**1. Backend API** (document upload + session tokens):
+## 🗄️ MongoDB Setup (for research cache)
+
+We use **MongoDB Atlas** (free tier) to cache company research results.
+
+1. Create a free cluster at [MongoDB Atlas](https://www.mongodb.com/atlas).
+2. In your `backend/.env` file, add:
+   ```
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster...mongodb.net/
+   ```
+3. The agent will automatically create the `company_research_db` database and `research` collection on first use.
+4. A TTL index auto‑deletes entries older than 30 days – no manual cleanup.
+
+---
+
+## 🧪 Testing the Research Pipeline (without frontend)
+
+```bash
+cd backend/agent
+python test_research.py
 ```
+
+Enter a company and position – the script runs the tiered research, shows the source/confidence, and caches the result in MongoDB. Run it again with the same inputs to confirm the cache hit.
+
+---
+
+## 🔧 Environment Variables
+
+Create a `backend/.env` file (copy from `.env.example`) with at least:
+
+```
+LIVEKIT_URL=...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+DEEPGRAM_API_KEY=...
+GROQ_API_KEY=...
+TAVILY_API_KEY=...          # required for company research fallback
+PINECONE_API_KEY=...        # for RAG
+MONGODB_URI=...             # for research cache
+```
+
+Never commit `.env` to Git.
+
+---
+
+## 🚀 Running Everything (3 terminals)
+
+### 1. Backend API (document upload + session tokens)
+
+```bash
 cd backend
 python -m venv .venv-api
-.venv-api\Scripts\activate
+# Windows: .venv-api\Scripts\activate   | Mac/Linux: source .venv-api/bin/activate
 pip install -r api\requirements.txt
-copy .env.example .env   # fill in LIVEKIT_*, DEEPGRAM_API_KEY, GROQ_API_KEY, PINECONE_API_KEY
 python -m uvicorn api.main:app --reload --port 8001
 ```
 
-**2. Voice agent worker**:
-```
+### 2. Voice Agent Worker
+
+```bash
 cd backend\agent
 python -m venv .venv
-.venv\Scripts\activate
+# activate as above
 pip install -r requirements.txt
 python agent.py dev
 ```
-(Agent reads the same `backend\.env` automatically — no separate copy needed.)
 
-**3. Frontend**:
-```
+The agent reads the same `backend/.env` automatically.
+
+### 3. Frontend
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open http://localhost:3000, upload a `.txt`/`.pdf`, then click **Start
-interview** — it connects to LiveKit with your mic, and the agent worker
-in terminal 2 grounds its questions in the uploaded document.
 
-To test the voice agent alone without the frontend, `python agent.py
-console` talks to it directly in your terminal (no document grounding,
-since there's no room metadata in console mode).
+Open http://localhost:3000, upload a document, and click **Start Interview**.
 
-**Never commit `.env`/`.env.local` or paste API keys in chat/issues/commits.**
+To test the voice agent alone (no document grounding), run `python agent.py console`.
+
+---
+
+## 🔍 How Company Research Works
+
+1. Frontend passes `company_name` and `position` in room metadata.
+2. Agent calls `get_company_context(company, position)`.
+3. **Cache check** – MongoDB returns cached result if exists.
+4. **Tier 1** – parametric LLM (Groq) – if confidence ≥ 0.4 and no hedging phrases → saved.
+5. **Tier 2** – Tavily web search (Glassdoor, Reddit, etc.) → synthesised summary → saved.
+6. **Fallback** – generic "no info" message.
+
+The summary is woven into the agent's system prompt via `build_instructions()`.
+
+---
+
+## 📊 Scoring
+
+When a call ends, a shutdown callback scores the transcript against the rubric and stores it. Retrieve the score via:
+
+```
+GET /sessions/{session_id}/score
+```
+
+---
+
+## 📬 Next Steps (optional)
+
+- Frontend polish (real‑time transcript, progress indicators)
+- Multi‑language support
+- Advanced analytics dashboard
+
+---
+
+## 🤝 Contributing
+
+- Keep `.env` out of Git.
+- Use `test_research.py` to validate changes to the research pipeline.
+- Open pull requests for new features.
+
+---
+
+**Never commit `.env`/`.env.local` or paste API keys in chat/issues/commits.**  
 All keys are loaded from environment variables via `python-dotenv`.
+```
+
+---
+The file should now end with:
+```
+All keys are loaded from environment variables via `python-dotenv`.
+```
