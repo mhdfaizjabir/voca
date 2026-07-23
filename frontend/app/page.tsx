@@ -51,8 +51,15 @@ type AnswerFeedback = {
 
 type Persona = "friendly" | "balanced" | "tough";
 
+type SessionAnalytics = {
+  createdAt: string;
+  overall: number;
+  criteria: { criterion: string; score: number }[];
+  fillers: number;
+};
+
 type StepState = "pending" | "active" | "done";
-type View = "landing" | "practice" | "chat";
+type View = "landing" | "practice" | "chat" | "analytics";
 type OrbState = "connecting" | "speaking" | "listening" | "idle";
 
 const VERDICT_STYLE: Record<AnswerFeedback["verdict"], { label: string; fg: string; soft: string; border: string }> = {
@@ -325,6 +332,52 @@ function Spinner({ size = 16 }: { size?: number }) {
   return <span className="spin-soft inline-block rounded-full border-2 border-white/25 border-t-white" style={{ width: size, height: size }} />;
 }
 
+function LineChart({ points, yMax, unit = "" }: { points: { label: string; value: number }[]; yMax?: number; unit?: string }) {
+  const w = 640;
+  const h = 200;
+  const padL = 34;
+  const padR = 12;
+  const padT = 16;
+  const padB = 28;
+  const values = points.map((p) => p.value);
+  const top = yMax ?? Math.max(1, ...values) * 1.15;
+  const x = (i: number) => padL + (points.length === 1 ? 0 : (i / (points.length - 1)) * (w - padL - padR));
+  const y = (v: number) => padT + (1 - v / top) * (h - padT - padB);
+  const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
+  const gridVals = [0, top / 2, top];
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxWidth: "100%" }}>
+      <defs>
+        <linearGradient id="lc" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent-bright)" stopOpacity="0.28" />
+          <stop offset="100%" stopColor="var(--accent-bright)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {gridVals.map((gv, i) => (
+        <g key={i}>
+          <line x1={padL} y1={y(gv)} x2={w - padR} y2={y(gv)} stroke="var(--border)" strokeWidth={1} />
+          <text x={padL - 6} y={y(gv) + 4} textAnchor="end" fontSize={11} fill="var(--text-dim)">
+            {Math.round(gv)}
+            {unit}
+          </text>
+        </g>
+      ))}
+      {points.length > 1 && <path d={`${line} L${x(points.length - 1)},${y(0)} L${x(0)},${y(0)} Z`} fill="url(#lc)" />}
+      <path d={line} fill="none" stroke="var(--accent-bright)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((p, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(p.value)} r={3.5} fill="var(--accent-bright)" />
+          {(points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0) && (
+            <text x={x(i)} y={h - 8} textAnchor="middle" fontSize={10.5} fill="var(--text-dim)">
+              {p.label}
+            </text>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function VoiceOrb({ level, state }: { level: number; state: OrbState }) {
   const color =
     state === "speaking" ? "var(--accent-bright)" : state === "listening" ? "var(--good)" : "var(--text-dim)";
@@ -460,6 +513,9 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeSession, setActiveSession] = useState<HistoryEntry | null>(null);
 
+  const [analytics, setAnalytics] = useState<SessionAnalytics[] | null>(null);
+  const [analyticsStatus, setAnalyticsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
   // Live voice-mode state
   const [agentLevel, setAgentLevel] = useState(0);
   const [userLevel, setUserLevel] = useState(0);
@@ -495,6 +551,42 @@ export default function Home() {
   function enterPractice(mode: string) {
     setResourceType(mode);
     setView("practice");
+  }
+
+  async function openAnalytics() {
+    setView("analytics");
+    const scored = history.filter((h) => typeof h.score === "number");
+    if (scored.length === 0) {
+      setAnalytics([]);
+      setAnalyticsStatus("ready");
+      return;
+    }
+    setAnalyticsStatus("loading");
+    try {
+      const results = await Promise.all(
+        scored.map(async (h): Promise<SessionAnalytics | null> => {
+          try {
+            const res = await fetch(`${API_URL}/sessions/${h.sessionId}/score`);
+            if (!res.ok) return null;
+            const data: SessionScore = await res.json();
+            return {
+              createdAt: h.createdAt,
+              overall: Math.round(data.score.overall_score),
+              criteria: data.score.scores.map((s) => ({ criterion: s.criterion, score: s.score_0_100 })),
+              fillers: data.transcript ? transcriptStats(data.transcript).fillers : 0,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      // oldest → newest so the trend reads left-to-right
+      const clean = results.filter((r): r is SessionAnalytics => r !== null).reverse();
+      setAnalytics(clean);
+      setAnalyticsStatus("ready");
+    } catch {
+      setAnalyticsStatus("error");
+    }
   }
 
   async function handleUpload() {
@@ -913,7 +1005,7 @@ export default function Home() {
               onClick={() => setView("landing")}
               className="text-[13px] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors duration-150 flex items-center gap-1.5"
             >
-              <span aria-hidden>←</span> {view === "chat" ? "Past sessions" : "All sessions"}
+              <span aria-hidden>←</span> {view === "chat" ? "Past sessions" : view === "analytics" ? "Home" : "All sessions"}
             </button>
           ) : callStatus === "connected" ? (
             <span className="flex items-center gap-2 text-[12.5px] text-[var(--text-muted)]">
@@ -975,16 +1067,20 @@ export default function Home() {
 
           {scoredHistory.length >= 2 && (
             <section className="mb-12 animate-in" style={{ animationDelay: "130ms" }}>
-              <div className="glass p-5 flex items-center justify-between gap-4 flex-wrap">
+              <button
+                onClick={openAnalytics}
+                className="glass w-full p-5 flex items-center justify-between gap-4 flex-wrap text-left hover:border-[var(--border-strong)] hover:bg-white/[0.02] transition-colors duration-150"
+              >
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-[var(--text-dim)] mb-1">Your progress</p>
                   <p className="text-[13.5px] text-[var(--text-muted)]">
                     Average score <strong className="text-[var(--text)] font-semibold">{avgScore}</strong> across{" "}
-                    {scoredHistory.length} sessions
+                    {scoredHistory.length} sessions ·{" "}
+                    <span style={{ color: "var(--accent-bright)" }}>View analytics →</span>
                   </p>
                 </div>
                 <Sparkline values={scoredHistory.slice(0, 12).map((h) => h.score ?? 0).reverse()} />
-              </div>
+              </button>
             </section>
           )}
 
@@ -1366,6 +1462,81 @@ export default function Home() {
                 </StepRow>
               </div>
             </>
+          )}
+        </main>
+      ) : view === "analytics" ? (
+        <main className="mx-auto max-w-3xl px-5 pt-12 md:pt-16">
+          <div className="mb-8 animate-in">
+            <h1 className="text-[28px] md:text-4xl font-semibold tracking-tight gradient-text leading-tight">Your analytics</h1>
+            <p className="mt-2.5 text-[var(--text-muted)] text-[15px]">How your practice has trended over time.</p>
+          </div>
+
+          {analyticsStatus === "loading" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2.5 text-[13.5px] text-[var(--text-muted)]">
+                <Spinner size={15} /> Crunching your sessions…
+              </div>
+              <div className="glass h-48 shimmer" />
+            </div>
+          )}
+
+          {analyticsStatus === "error" && <p className="text-[13.5px] text-[var(--bad)]">Couldn&apos;t load your analytics — try again.</p>}
+
+          {analyticsStatus === "ready" && analytics && analytics.length === 0 && (
+            <div className="glass px-5 py-8 text-center text-[13.5px] text-[var(--text-dim)]">
+              Complete a session or two and your trends will show up here.
+            </div>
+          )}
+
+          {analyticsStatus === "ready" && analytics && analytics.length > 0 && (
+            <div className="flex flex-col gap-6 animate-in">
+              {(() => {
+                const overalls = analytics.map((a) => a.overall);
+                const avg = Math.round(overalls.reduce((n, v) => n + v, 0) / overalls.length);
+                const best = Math.max(...overalls);
+                const totalFillers = analytics.reduce((n, a) => n + a.fillers, 0);
+                // per-criterion averages across sessions
+                const critMap = new Map<string, number[]>();
+                for (const a of analytics) for (const c of a.criteria) critMap.set(c.criterion, [...(critMap.get(c.criterion) ?? []), c.score]);
+                const critAverages = [...critMap.entries()].map(([criterion, scores]) => ({
+                  criterion,
+                  score: Math.round(scores.reduce((n, v) => n + v, 0) / scores.length),
+                }));
+                const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                return (
+                  <>
+                    <div className="flex gap-2.5 flex-wrap">
+                      <StatTile label="Sessions" value={analytics.length} />
+                      <StatTile label="Average" value={avg} hint="/ 100" />
+                      <StatTile label="Best" value={best} hint="/ 100" />
+                      <StatTile label="Total fillers" value={totalFillers} />
+                    </div>
+
+                    <div className="glass p-5">
+                      <p className="text-[13px] font-semibold tracking-tight mb-4">Score over time</p>
+                      <LineChart points={analytics.map((a) => ({ label: fmtDate(a.createdAt), value: a.overall }))} yMax={100} />
+                    </div>
+
+                    <div className="glass p-5">
+                      <p className="text-[13px] font-semibold tracking-tight mb-4">Average by criterion</p>
+                      <div>
+                        {critAverages.map((c) => (
+                          <CriterionBar key={c.criterion} criterion={c.criterion} score_0_100={c.score} justification={`Averaged across ${analytics.length} sessions.`} />
+                        ))}
+                      </div>
+                    </div>
+
+                    {analytics.length > 1 && (
+                      <div className="glass p-5">
+                        <p className="text-[13px] font-semibold tracking-tight mb-1">Filler words per session</p>
+                        <p className="text-[12.5px] text-[var(--text-muted)] mb-4">Fewer is better — watch this trend down as you get more fluent.</p>
+                        <LineChart points={analytics.map((a) => ({ label: fmtDate(a.createdAt), value: a.fillers }))} />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           )}
         </main>
       ) : (
