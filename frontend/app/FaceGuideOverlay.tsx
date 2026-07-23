@@ -3,6 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import type { FaceLandmarker as FaceLandmarkerType } from "@mediapipe/tasks-vision";
 
+// MediaPipe's WASM runtime prints benign INFO lines (e.g. the "Created TensorFlow
+// Lite XNNPACK delegate for CPU" notice) through console.error, which trips
+// Next.js's dev error overlay. Swallow only those exact known-benign messages so
+// real errors still surface. Installed once, guarded against double-patching.
+if (typeof window !== "undefined" && !(window as unknown as { __mpLogPatched?: boolean }).__mpLogPatched) {
+  (window as unknown as { __mpLogPatched?: boolean }).__mpLogPatched = true;
+  const benign = /XNNPACK|TensorFlow Lite|Created TensorFlow/i;
+  (["error", "info", "warn"] as const).forEach((level) => {
+    const original = console[level].bind(console);
+    console[level] = (...args: unknown[]) => {
+      if (typeof args[0] === "string" && benign.test(args[0])) return;
+      original(...(args as []));
+    };
+  });
+}
+
 // Mirrors backend/vision/attention.py's JOB_* thresholds so the live on-screen
 // guide matches what the server-side scorer will actually judge.
 const YAW_LIMIT_DEG = 18;
