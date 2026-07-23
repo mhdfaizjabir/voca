@@ -282,8 +282,22 @@ async def entrypoint(ctx: JobContext) -> None:
     if meta.duration_minutes:
         timer_task = asyncio.create_task(_auto_end_after(meta.duration_minutes))
 
-    # --- Shutdown callback: score & save transcript ---
+    # --- Score & save transcript ---
+    # Runs at most once (guarded), triggered either by the candidate leaving or by
+    # job shutdown - whichever happens first. Scoring on participant-disconnect
+    # matters because the room/transport teardown afterwards can be slow, and on
+    # some platforms the native webrtc layer can crash during it, which would
+    # otherwise lose the score entirely.
+    scored = False
+    scoring_lock = asyncio.Lock()
+
     async def score_and_save() -> None:
+        nonlocal scored
+        async with scoring_lock:
+            if scored:
+                return
+            scored = True
+
         if video_task is not None:
             video_task.cancel()
         if timer_task is not None:
@@ -294,18 +308,29 @@ async def entrypoint(ctx: JobContext) -> None:
         if not transcript:
             return
         attention_summary = attention_tracker.get_summary() if attention_tracker else None
+        loop = asyncio.get_event_loop()
         try:
-            report = score_transcript(transcript, meta.rubric, attention_summary)
-            save_session_score(
-                session_id=ctx.room.name,
-                document_id=meta.document_id,
-                transcript=[t.model_dump() for t in transcript],
-                rubric=meta.rubric.model_dump(),
-                score=report.model_dump(),
+            # score_transcript makes a blocking LLM call - run it off the event
+            # loop so it can finish even while the session is tearing down.
+            report = await loop.run_in_executor(None, score_transcript, transcript, meta.rubric, attention_summary)
+            await loop.run_in_executor(
+                None,
+                lambda: save_session_score(
+                    session_id=ctx.room.name,
+                    document_id=meta.document_id,
+                    transcript=[t.model_dump() for t in transcript],
+                    rubric=meta.rubric.model_dump(),
+                    score=report.model_dump(),
+                ),
             )
+            logger.info("Saved score for session_id=%s", ctx.room.name)
         except Exception:
             logger.exception("Scoring failed for session_id=%s", ctx.room.name)
 
+    def _on_participant_disconnected(participant: rtc.RemoteParticipant) -> None:
+        asyncio.create_task(score_and_save())
+
+    ctx.room.on("participant_disconnected", _on_participant_disconnected)
     ctx.add_shutdown_callback(score_and_save)
 
     # --- Start the agent and greet the candidate ---
