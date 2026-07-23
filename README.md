@@ -170,6 +170,8 @@ python run_dev.py
 
 Then open **http://localhost:3000**.
 
+The voice agent is supervised — if it crashes (the LiveKit native layer can panic while a call tears down), `run_dev.py` automatically respawns it, so you can run one interview after another without restarting.
+
 > Prefer separate terminals? Run each service manually:
 > - API: `cd backend && python -m uvicorn api.main:app --reload --port 8001`
 > - Agent: `cd backend/agent && python agent.py dev`
