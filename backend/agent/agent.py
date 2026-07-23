@@ -85,18 +85,19 @@ class RoomMetadata:
     persona: str | None  # "friendly" | "balanced" | "tough" | None
     difficulty: str | None  # "easy" | "normal" | "hard" | None
     voice: str | None  # short Aura voice key, e.g. "thalia" | None
+    focus_areas: list[str] | None  # targeted re-drill topics, or None
 
 
 def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
     """Parses room metadata JSON, falling back to safe defaults on missing/invalid input."""
     if not room_metadata:
-        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None)
+        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None, None)
 
     try:
         data = json.loads(room_metadata)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON in room metadata")
-        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None)
+        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None, None)
 
     resource_type = data.get("resource_type")
 
@@ -129,6 +130,12 @@ def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
     if voice not in AURA_VOICES:
         voice = None
 
+    focus_areas = data.get("focus_areas")
+    if isinstance(focus_areas, list):
+        focus_areas = [str(x).strip() for x in focus_areas if isinstance(x, str) and x.strip()][:6] or None
+    else:
+        focus_areas = None
+
     return RoomMetadata(
         document_id=data.get("document_id"),
         rubric=rubric,
@@ -139,6 +146,7 @@ def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
         persona=persona,
         difficulty=difficulty,
         voice=voice,
+        focus_areas=focus_areas,
     )
 
 
@@ -203,7 +211,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # --- Build the system prompt combining both ---
     instructions = build_instructions(
-        context_chunks, company_context, meta.resource_type, meta.persona, meta.difficulty
+        context_chunks, company_context, meta.resource_type, meta.persona, meta.difficulty, meta.focus_areas
     )
 
     # --- Camera attention tracking - job interviews only. Course-material / viva

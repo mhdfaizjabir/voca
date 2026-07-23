@@ -81,6 +81,7 @@ def build_instructions(
     resource_type: str | None = None,
     persona: str | None = None,
     difficulty: str | None = None,
+    focus_areas: list[str] | None = None,
 ) -> str:
     instructions = BASE_INTERVIEWER_INSTRUCTIONS
 
@@ -93,6 +94,17 @@ def build_instructions(
 
     if difficulty and difficulty in DIFFICULTY_DIRECTIVES:
         instructions += "\n\n" + DIFFICULTY_DIRECTIVES[difficulty]
+
+    # Targeted re-drill: concentrate the whole interview on the specific areas the
+    # candidate previously scored poorly on.
+    if focus_areas:
+        joined = "; ".join(focus_areas)
+        instructions += (
+            "\n\nFOCUSED RE-DRILL: This is a targeted follow-up session. Concentrate "
+            f"your questions specifically on these areas the candidate struggled with "
+            f"last time: {joined}. Keep probing these topics until they show real "
+            "improvement, and do not drift to unrelated material."
+        )
 
     # 1. Document grounding (CV/JD)
     if context_chunks:

@@ -767,7 +767,7 @@ export default function Home() {
     timerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
   }
 
-  async function handleStartInterview() {
+  async function handleStartInterview(focusAreas?: string[]) {
     if (!document) return;
     setCallStatus("connecting");
     setCallError(null);
@@ -790,6 +790,7 @@ export default function Home() {
           persona,
           difficulty,
           voice,
+          focus_areas: focusAreas && focusAreas.length > 0 ? focusAreas : undefined,
         }),
       });
 
@@ -1360,7 +1361,7 @@ export default function Home() {
                   </div>
 
                   <button
-                    onClick={handleStartInterview}
+                    onClick={() => handleStartInterview()}
                     disabled={!document || callStatus === "connecting"}
                     className="relative px-5 py-2.5 rounded-[10px] text-[13.5px] font-medium text-white transition-all duration-150 disabled:opacity-40 flex items-center gap-2"
                     style={{ background: !document || callStatus === "connecting" ? "var(--surface-hover)" : "var(--accent)" }}
@@ -1467,27 +1468,42 @@ export default function Home() {
                         )}
                       </div>
 
-                      <div className="mt-6 flex gap-2.5 flex-wrap">
-                        <button
-                          onClick={() => {
-                            const entry = history.find((h) => h.sessionId === pollingRoomRef.current);
-                            if (entry) {
-                              setActiveSession(entry);
-                              setView("chat");
-                            }
-                          }}
-                          className="px-4 py-2 rounded-[10px] text-[13px] font-medium transition-colors duration-150 border border-[var(--border-strong)] hover:bg-white/[0.04] flex items-center gap-2"
-                        >
-                          💬 Chat about this session
-                        </button>
-                        <button
-                          onClick={downloadResultCard}
-                          className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-white transition-colors duration-150 flex items-center gap-2"
-                          style={{ background: "var(--accent)" }}
-                        >
-                          ⬇ Download result card
-                        </button>
-                      </div>
+                      {(() => {
+                        const weakCriteria = sessionScore.score.scores.filter((s) => s.score_0_100 < 65).map((s) => s.criterion);
+                        const weakFromFeedback = (feedback ?? []).filter((f) => f.verdict === "weak").map((f) => f.question);
+                        const weakAreas = [...new Set([...weakCriteria, ...weakFromFeedback])].slice(0, 6);
+                        return (
+                          <div className="mt-6 flex gap-2.5 flex-wrap">
+                            {weakAreas.length > 0 && (
+                              <button
+                                onClick={() => handleStartInterview(weakAreas)}
+                                className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-white transition-transform duration-150 hover:scale-[1.02] flex items-center gap-2"
+                                style={{ background: "linear-gradient(135deg, var(--accent), var(--good))" }}
+                              >
+                                🎯 Re-drill weak areas
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                const entry = history.find((h) => h.sessionId === pollingRoomRef.current);
+                                if (entry) {
+                                  setActiveSession(entry);
+                                  setView("chat");
+                                }
+                              }}
+                              className="px-4 py-2 rounded-[10px] text-[13px] font-medium transition-colors duration-150 border border-[var(--border-strong)] hover:bg-white/[0.04] flex items-center gap-2"
+                            >
+                              💬 Chat about this session
+                            </button>
+                            <button
+                              onClick={downloadResultCard}
+                              className="px-4 py-2 rounded-[10px] text-[13px] font-medium transition-colors duration-150 border border-[var(--border-strong)] hover:bg-white/[0.04] flex items-center gap-2"
+                            >
+                              ⬇ Download result card
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </StepRow>

@@ -35,6 +35,7 @@ class StartSessionIn(BaseModel):
     persona: str | None = None  # "friendly" | "balanced" | "tough"
     difficulty: str | None = None  # "easy" | "normal" | "hard"
     voice: str | None = None  # "thalia" | "apollo" | "helena" | "arcas"
+    focus_areas: list[str] | None = None  # targeted re-drill topics
 
 
 class StartSessionOut(BaseModel):
@@ -97,6 +98,10 @@ def start_session(body: StartSessionIn) -> StartSessionOut:
         metadata["difficulty"] = body.difficulty
     if body.voice in VALID_VOICES:
         metadata["voice"] = body.voice
+    if body.focus_areas:
+        cleaned = [a.strip() for a in body.focus_areas if a and a.strip()][:6]
+        if cleaned:
+            metadata["focus_areas"] = cleaned
 
     token = (
         AccessToken(os.environ["LIVEKIT_API_KEY"], os.environ["LIVEKIT_API_SECRET"])
