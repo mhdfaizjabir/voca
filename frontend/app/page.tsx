@@ -50,6 +50,8 @@ type AnswerFeedback = {
 };
 
 type Persona = "friendly" | "balanced" | "tough";
+type Difficulty = "easy" | "normal" | "hard";
+type Voice = "thalia" | "apollo" | "helena" | "arcas";
 
 type SessionAnalytics = {
   createdAt: string;
@@ -494,6 +496,8 @@ export default function Home() {
   const [position, setPosition] = useState("");
   const [durationMinutes, setDurationMinutes] = useState<number | "">("");
   const [persona, setPersona] = useState<Persona>("balanced");
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [voice, setVoice] = useState<Voice>("thalia");
 
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [callError, setCallError] = useState<string | null>(null);
@@ -784,6 +788,8 @@ export default function Home() {
           position: position.trim() || undefined,
           duration_minutes: durationMinutes === "" ? undefined : durationMinutes,
           persona,
+          difficulty,
+          voice,
         }),
       });
 
@@ -1325,6 +1331,31 @@ export default function Home() {
                           ? "Demanding and rigorous — expect hard follow-ups."
                           : "Realistic and fair, like a normal interview."}
                       </p>
+                    </div>
+                    <div>
+                      <p className="text-[12px] text-[var(--text-dim)] mb-1.5">Question difficulty</p>
+                      <SegmentedControl
+                        value={difficulty}
+                        onChange={setDifficulty}
+                        options={[
+                          { value: "easy", label: "Easy" },
+                          { value: "normal", label: "Normal" },
+                          { value: "hard", label: "Hard" },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[12px] text-[var(--text-dim)] mb-1.5">Interviewer voice</p>
+                      <SegmentedControl
+                        value={voice}
+                        onChange={setVoice}
+                        options={[
+                          { value: "thalia", label: "Thalia" },
+                          { value: "apollo", label: "Apollo" },
+                          { value: "helena", label: "Helena" },
+                          { value: "arcas", label: "Arcas" },
+                        ]}
+                      />
                     </div>
                   </div>
 

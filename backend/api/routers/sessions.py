@@ -20,6 +20,8 @@ from scoring.rubric import Rubric
 from scoring.schemas import ScoreReport, TranscriptTurn
 
 VALID_PERSONAS = ("friendly", "balanced", "tough")
+VALID_DIFFICULTIES = ("easy", "normal", "hard")
+VALID_VOICES = ("thalia", "apollo", "helena", "arcas")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -31,6 +33,8 @@ class StartSessionIn(BaseModel):
     position: str | None = None
     duration_minutes: int | None = None
     persona: str | None = None  # "friendly" | "balanced" | "tough"
+    difficulty: str | None = None  # "easy" | "normal" | "hard"
+    voice: str | None = None  # "thalia" | "apollo" | "helena" | "arcas"
 
 
 class StartSessionOut(BaseModel):
@@ -89,6 +93,10 @@ def start_session(body: StartSessionIn) -> StartSessionOut:
         metadata["duration_minutes"] = body.duration_minutes
     if body.persona in VALID_PERSONAS:
         metadata["persona"] = body.persona
+    if body.difficulty in VALID_DIFFICULTIES:
+        metadata["difficulty"] = body.difficulty
+    if body.voice in VALID_VOICES:
+        metadata["voice"] = body.voice
 
     token = (
         AccessToken(os.environ["LIVEKIT_API_KEY"], os.environ["LIVEKIT_API_SECRET"])

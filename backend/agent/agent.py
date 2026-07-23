@@ -53,6 +53,16 @@ logging.getLogger("groq").setLevel(logging.WARNING)
 ATTENTION_SAMPLE_INTERVAL_S = 0.5
 WRAP_UP_LEAD_S = 60  # give a heads-up this many seconds before a timed interview auto-ends
 
+# Selectable Deepgram Aura-2 interviewer voices, keyed by the short name the
+# frontend sends. Falls back to DEFAULT_VOICE for anything unrecognized.
+AURA_VOICES = {
+    "thalia": "aura-2-thalia-en",
+    "apollo": "aura-2-apollo-en",
+    "helena": "aura-2-helena-en",
+    "arcas": "aura-2-arcas-en",
+}
+DEFAULT_VOICE = "thalia"
+
 
 def prewarm(proc: JobProcess) -> None:
     """Loaded once per worker process, reused across every room/job it handles."""
@@ -73,18 +83,20 @@ class RoomMetadata:
     resource_type: str | None  # "job_description" or "course_material"
     duration_minutes: int | None  # None = no auto-end timer
     persona: str | None  # "friendly" | "balanced" | "tough" | None
+    difficulty: str | None  # "easy" | "normal" | "hard" | None
+    voice: str | None  # short Aura voice key, e.g. "thalia" | None
 
 
 def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
     """Parses room metadata JSON, falling back to safe defaults on missing/invalid input."""
     if not room_metadata:
-        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None)
+        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None)
 
     try:
         data = json.loads(room_metadata)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON in room metadata")
-        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None)
+        return RoomMetadata(None, default_rubric_for(None), None, None, None, None, None, None, None)
 
     resource_type = data.get("resource_type")
 
@@ -109,6 +121,14 @@ def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
     if persona not in ("friendly", "balanced", "tough"):
         persona = None
 
+    difficulty = data.get("difficulty")
+    if difficulty not in ("easy", "normal", "hard"):
+        difficulty = None
+
+    voice = data.get("voice")
+    if voice not in AURA_VOICES:
+        voice = None
+
     return RoomMetadata(
         document_id=data.get("document_id"),
         rubric=rubric,
@@ -117,6 +137,8 @@ def _parse_room_metadata(room_metadata: str) -> RoomMetadata:
         resource_type=resource_type,
         duration_minutes=duration_minutes,
         persona=persona,
+        difficulty=difficulty,
+        voice=voice,
     )
 
 
@@ -180,7 +202,9 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.exception("Company research failed for %s", meta.company_name)
 
     # --- Build the system prompt combining both ---
-    instructions = build_instructions(context_chunks, company_context, meta.resource_type, meta.persona)
+    instructions = build_instructions(
+        context_chunks, company_context, meta.resource_type, meta.persona, meta.difficulty
+    )
 
     # --- Camera attention tracking - job interviews only. Course-material / viva
     # practice has no proctoring purpose, so we don't even subscribe to video there. ---
@@ -205,11 +229,12 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.on("track_subscribed", _on_track_subscribed)
 
     # --- Create session ---
+    voice_model = AURA_VOICES.get(meta.voice or DEFAULT_VOICE, AURA_VOICES[DEFAULT_VOICE])
     session = AgentSession(
         vad=ctx.proc.userdata["vad"],
         stt=deepgram.STT(model="nova-3", language="en"),
         llm=groq.LLM(model="llama-3.3-70b-versatile", temperature=0.7),
-        tts=deepgram.TTS(model="aura-2-thalia-en"),
+        tts=deepgram.TTS(model=voice_model),
     )
 
     # --- Short-term in-memory turn cache (last N turns, cleared at session end) ---

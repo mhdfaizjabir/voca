@@ -53,11 +53,34 @@ professional and never rude, but keep the pressure high.
 }
 
 
+# Difficulty controls how deep/advanced the *questions* go - distinct from
+# persona, which controls the interviewer's demeanor. A friendly interviewer
+# can still ask hard questions, and vice versa.
+DIFFICULTY_DIRECTIVES = {
+    "easy": """
+QUESTION DIFFICULTY - Easy: Keep questions foundational and confidence-building.
+Focus on core concepts and definitions. Avoid deep edge cases or multi-part
+questions.
+""",
+    "normal": """
+QUESTION DIFFICULTY - Normal: Mix foundational questions with moderately
+challenging follow-ups. Occasionally ask the candidate to justify or apply a
+concept, not just recall it.
+""",
+    "hard": """
+QUESTION DIFFICULTY - Hard: Ask advanced, probing questions. Push into edge
+cases, trade-offs, and 'why' / 'what if' scenarios. Expect the candidate to
+reason under pressure and defend their answers with specifics.
+""",
+}
+
+
 def build_instructions(
     context_chunks: list[str] | None = None,
     company_context: dict | None = None,
     resource_type: str | None = None,
     persona: str | None = None,
+    difficulty: str | None = None,
 ) -> str:
     instructions = BASE_INTERVIEWER_INSTRUCTIONS
 
@@ -67,6 +90,9 @@ def build_instructions(
 
     if persona and persona in PERSONA_DIRECTIVES:
         instructions += "\n\n" + PERSONA_DIRECTIVES[persona]
+
+    if difficulty and difficulty in DIFFICULTY_DIRECTIVES:
+        instructions += "\n\n" + DIFFICULTY_DIRECTIVES[difficulty]
 
     # 1. Document grounding (CV/JD)
     if context_chunks:
