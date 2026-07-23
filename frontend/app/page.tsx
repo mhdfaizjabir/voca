@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Room, RoomEvent, Track } from "livekit-client";
+import { Room, RoomEvent, Track, type LocalVideoTrack } from "livekit-client";
 import FaceGuideOverlay from "./FaceGuideOverlay";
 import ReviewChat from "./ReviewChat";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 const SCORE_POLL_INTERVAL_MS = 3000;
-const SCORE_POLL_MAX_ATTEMPTS = 20;
+const SCORE_POLL_MAX_ATTEMPTS = 30;
 const HISTORY_STORAGE_KEY = "voca_interview_history";
 const TRANSCRIPTION_TOPIC = "lk.transcription";
 const FILLER_RE = /\b(um+|uh+|er+|like|you know|basically|actually|literally|kind of|sort of|i mean)\b/gi;
@@ -504,6 +504,7 @@ export default function Home() {
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selfVideoRef = useRef<HTMLVideoElement | null>(null);
+  const camTrackRef = useRef<LocalVideoTrack | null>(null);
 
   const [scoreStatus, setScoreStatus] = useState<"idle" | "polling" | "ready" | "timeout">("idle");
   const [sessionScore, setSessionScore] = useState<SessionScore | null>(null);
@@ -826,7 +827,10 @@ export default function Home() {
       if (isJobDescription) {
         try {
           const cameraPub = await room.localParticipant.setCameraEnabled(true);
-          if (cameraPub?.videoTrack && selfVideoRef.current) cameraPub.videoTrack.attach(selfVideoRef.current);
+          // Stash the track; the <video> element only mounts once callStatus flips
+          // to "connected", so the actual attach happens in an effect below (when
+          // selfVideoRef.current is guaranteed to exist).
+          if (cameraPub?.videoTrack) camTrackRef.current = cameraPub.videoTrack;
         } catch {
           // Camera is optional — continue with audio-only if it's unavailable/denied.
         }
@@ -845,6 +849,8 @@ export default function Home() {
     roomRef.current = null;
     stopAudioLoop();
     stopTimer();
+    camTrackRef.current?.detach();
+    camTrackRef.current = null;
     if (selfVideoRef.current) selfVideoRef.current.srcObject = null;
   }
 
@@ -965,6 +971,15 @@ export default function Home() {
       transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
     }
   }, [captions, showTranscript]);
+
+  // Attach the local camera preview once the call stage (and its <video>) has
+  // mounted. Attaching earlier — inside handleStartInterview — silently no-ops
+  // because the element isn't rendered until callStatus === "connected".
+  useEffect(() => {
+    if (callStatus === "connected" && resourceType === "job_description" && selfVideoRef.current && camTrackRef.current) {
+      camTrackRef.current.attach(selfVideoRef.current);
+    }
+  }, [callStatus, resourceType]);
 
   const isJobDescription = resourceType === "job_description";
   const uploadDisabled = (isJobDescription ? !jobDescriptionText.trim() : !file) || uploading;
