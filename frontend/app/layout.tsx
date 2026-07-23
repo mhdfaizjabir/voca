@@ -13,8 +13,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Voca AI — Interview Practice",
-  description: "Practice mock interviews and vivas with a live AI voice agent.",
+  metadataBase: new URL("https://voca-ai.local"),
+  title: "Voca AI — Talk it through before it counts",
+  description:
+    "Practice vivas and mock interviews out loud with a live AI voice partner, then get scored on exactly how you did.",
+  applicationName: "Voca AI",
+  openGraph: {
+    title: "Voca AI — Talk it through before it counts",
+    description:
+      "Practice vivas and mock interviews out loud with a live AI voice partner, then get scored on exactly how you did.",
+    siteName: "Voca AI",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Voca AI — Talk it through before it counts",
+    description: "Practice vivas and mock interviews with a live AI voice partner, then get scored instantly.",
+  },
 };
 
 export default function RootLayout({
