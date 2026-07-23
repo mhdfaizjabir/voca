@@ -69,7 +69,7 @@ Always return ONLY valid JSON with the following keys:
 TIER1_USER_PROMPT = (
     "What do you know about the real, reported interview process for the {position} position "
     "at {company} in {region}? Only include information you are certain is correct, based on "
-    "actual candidate experiences or widely‑known facts about the company. "
+    "actual candidate experiences or widely-known facts about the company. "
     "If you don't have specific details, say so clearly and set confidence below 0.4. "
     "Never invent interview stages or questions."
 )

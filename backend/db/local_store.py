@@ -54,6 +54,20 @@ def _init() -> None:
             )
             """
         )
+        # Text-only follow-up chat about a past interview (not a new interview -
+        # see chat/review_chat.py). Separate table so it can grow independently
+        # of session_scores without needing a migration.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
 
 
 _init()
@@ -111,6 +125,41 @@ def get_session_score(session_id: str) -> dict | None:
     result["rubric"] = json.loads(result.pop("rubric_json"))
     result["score"] = json.loads(result.pop("score_json"))
     return result
+
+
+def list_session_scores() -> list[dict]:
+    """Summaries only (no transcript/rubric bodies) - enough for a history list."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT session_id, document_id, score_json, created_at FROM session_scores "
+            "ORDER BY created_at DESC"
+        ).fetchall()
+    results = []
+    for row in rows:
+        item = dict(row)
+        score = json.loads(item.pop("score_json"))
+        item["overall_score"] = score.get("overall_score")
+        item["summary"] = score.get("summary")
+        results.append(item)
+    return results
+
+
+def append_chat_message(session_id: str, role: str, text: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO session_chat_messages (session_id, role, text) VALUES (?, ?, ?)",
+            (session_id, role, text),
+        )
+
+
+def get_chat_messages(session_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT role, text, created_at FROM session_chat_messages "
+            "WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def _normalize_company_name(name: str) -> str:
