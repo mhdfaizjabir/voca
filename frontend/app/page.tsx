@@ -1147,7 +1147,7 @@ export default function Home() {
 
                 {/* camera PiP for job interviews */}
                 {isJobDescription && (
-                  <div className="absolute top-4 right-4 z-10" style={{ width: 168 }}>
+                  <div className="absolute top-4 right-4 z-10" style={{ width: "clamp(116px, 30vw, 168px)" }}>
                     <video
                       ref={selfVideoRef}
                       autoPlay

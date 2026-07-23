@@ -216,3 +216,15 @@ button:disabled {
   animation: wave 1s ease-in-out infinite;
   transform-origin: center;
 }
+
+/* Respect users who prefer reduced motion: keep the UI functional but calm. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
