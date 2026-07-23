@@ -70,6 +70,28 @@ def stop_process(proc: subprocess.Popen) -> None:
         proc.terminate()
 
 
+# Services that should be respawned if they exit on their own, rather than
+# bringing the whole stack down. The voice agent can crash in the native webrtc
+# layer while a call tears down; auto-respawning means the next interview just
+# works without a manual restart.
+RESTART_ON_EXIT = {"agent"}
+MAX_RESTARTS = 5
+
+
+def start_service(svc: dict) -> subprocess.Popen:
+    proc = subprocess.Popen(
+        svc["cmd"],
+        cwd=svc["cwd"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        shell=svc.get("shell", False),
+    )
+    threading.Thread(target=stream_output, args=(svc["name"], proc), daemon=True).start()
+    return proc
+
+
 def main() -> None:
     for svc in SERVICES:
         if not svc["check_path"].exists():
@@ -77,32 +99,29 @@ def main() -> None:
             print("Set it up first per the README, then re-run this script.")
             sys.exit(1)
 
-    procs: list[tuple[str, subprocess.Popen]] = []
-    for svc in SERVICES:
-        proc = subprocess.Popen(
-            svc["cmd"],
-            cwd=svc["cwd"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            shell=svc.get("shell", False),
-        )
-        procs.append((svc["name"], proc))
-        threading.Thread(target=stream_output, args=(svc["name"], proc), daemon=True).start()
+    svc_by_name = {svc["name"]: svc for svc in SERVICES}
+    procs: dict[str, subprocess.Popen] = {svc["name"]: start_service(svc) for svc in SERVICES}
+    restarts: dict[str, int] = {name: 0 for name in procs}
 
     print("\nAll services starting (api, agent, frontend). Press Ctrl+C to stop everything.\n")
 
     try:
         while True:
             time.sleep(1)
-            for name, proc in procs:
-                if proc.poll() is not None:
+            for name, proc in list(procs.items()):
+                if proc.poll() is None:
+                    continue
+                if name in RESTART_ON_EXIT and restarts[name] < MAX_RESTARTS:
+                    restarts[name] += 1
+                    print(f"\n[{name}] exited (code {proc.returncode}) - restarting ({restarts[name]}/{MAX_RESTARTS})...\n")
+                    time.sleep(1)
+                    procs[name] = start_service(svc_by_name[name])
+                else:
                     print(f"\n[{name}] exited with code {proc.returncode} - stopping everything.\n")
                     raise KeyboardInterrupt
     except KeyboardInterrupt:
         print("\nStopping all services...")
-        for _, proc in procs:
+        for proc in procs.values():
             stop_process(proc)
         print("All stopped.")
 
